@@ -1,10 +1,25 @@
 const crypto = require('crypto');
 const express = require('express');
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const JWT_EXPIRES_IN = '1h';
+
 const users = new Map();
-const tokens = new Map();
+const revoked = new Set();
+
+const getToken = (req) => (req.get('authorization') || '').replace(/^Bearer /, '');
+
+const verifyToken = (token) => {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    return revoked.has(payload.jti) ? null : payload;
+  } catch {
+    return null;
+  }
+};
 
 const hashPassword = (password, salt) =>
   crypto.scryptSync(password, salt, 64).toString('hex');
@@ -34,24 +49,27 @@ router.post('/login', (req, res) => {
   if (!crypto.timingSafeEqual(actual, given)) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
-  const token = crypto.randomBytes(32).toString('hex');
-  tokens.set(token, username);
+  const token = jwt.sign({ role: user.role }, JWT_SECRET, {
+    algorithm: 'HS256',
+    subject: username,
+    expiresIn: JWT_EXPIRES_IN,
+    jwtid: crypto.randomUUID(),
+  });
   res.json({ token });
 });
 
 router.post('/logout', (req, res) => {
-  const token = (req.get('authorization') || '').replace(/^Bearer /, '');
-  tokens.delete(token);
+  const payload = verifyToken(getToken(req));
+  if (payload) revoked.add(payload.jti);
   res.json({ loggedOut: true });
 });
 
 const requireAuth = (req, res, next) => {
-  const token = (req.get('authorization') || '').replace(/^Bearer /, '');
-  const username = tokens.get(token);
-  if (!username) {
+  const payload = verifyToken(getToken(req));
+  if (!payload) {
     return res.status(401).json({ error: 'unauthorized' });
   }
-  req.user = { username, role: users.get(username).role };
+  req.user = { username: payload.sub, role: payload.role };
   next();
 };
 
