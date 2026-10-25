@@ -2,6 +2,12 @@ const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 
+try {
+  process.loadEnvFile();
+} catch {
+  // .env 파일이 없으면 기존 환경변수를 사용
+}
+
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
