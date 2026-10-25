@@ -16,8 +16,10 @@ const call = async (method, path, { token, body } = {}) => {
   return { status: res.status, json: await res.json() };
 };
 
-const login = async (username) =>
-  (await call('POST', '/auth/login', { body: { username, password: 'pw' } })).json.token;
+const loginTokens = async (username) =>
+  (await call('POST', '/auth/login', { body: { username, password: 'pw' } })).json;
+
+const login = async (username) => (await loginTokens(username)).accessToken;
 
 before(async () => {
   server = app.listen(0);
@@ -71,6 +73,29 @@ test('admin role: DELETE ok', async () => {
   const token = await login('admin1');
   const del = await call('DELETE', '/1', { token });
   assert.deepStrictEqual([del.status, del.json], [200, { id: '1', deleted: true }]);
+});
+
+test('refresh: rotates tokens and rejects reuse', async () => {
+  const { refreshToken } = await loginTokens('user1');
+  const res = await call('POST', '/auth/refresh', { body: { refreshToken } });
+  assert.strictEqual(res.status, 200);
+  assert.ok(res.json.accessToken && res.json.refreshToken);
+  assert.strictEqual((await call('PUT', '/1', { token: res.json.accessToken, body: {} })).status, 200);
+  const reuse = await call('POST', '/auth/refresh', { body: { refreshToken } });
+  assert.strictEqual(reuse.status, 401);
+});
+
+test('refresh: access token cannot be used as refresh or vice versa', async () => {
+  const { accessToken, refreshToken } = await loginTokens('user1');
+  assert.strictEqual((await call('POST', '/auth/refresh', { body: { refreshToken: accessToken } })).status, 401);
+  assert.strictEqual((await call('PUT', '/1', { token: refreshToken, body: {} })).status, 401);
+  assert.strictEqual((await call('POST', '/auth/refresh', { body: {} })).status, 401);
+});
+
+test('logout revokes refresh token', async () => {
+  const { accessToken, refreshToken } = await loginTokens('user1');
+  await call('POST', '/auth/logout', { token: accessToken, body: { refreshToken } });
+  assert.strictEqual((await call('POST', '/auth/refresh', { body: { refreshToken } })).status, 401);
 });
 
 test('logout invalidates token', async () => {

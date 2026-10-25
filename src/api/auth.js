@@ -5,20 +5,40 @@ const jwt = require('jsonwebtoken');
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
-const JWT_EXPIRES_IN = '1h';
+const ACCESS_EXPIRES_IN = '15m';
+const REFRESH_EXPIRES_IN = '7d';
 
 const users = new Map();
 const revoked = new Set();
+const refreshTokens = new Set();
 
 const getToken = (req) => (req.get('authorization') || '').replace(/^Bearer /, '');
 
-const verifyToken = (token) => {
+const verifyToken = (token, type) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+    if (payload.type !== type) return null;
     return revoked.has(payload.jti) ? null : payload;
   } catch {
     return null;
   }
+};
+
+const signToken = (username, role, type, expiresIn) =>
+  jwt.sign({ role, type }, JWT_SECRET, {
+    algorithm: 'HS256',
+    subject: username,
+    expiresIn,
+    jwtid: crypto.randomUUID(),
+  });
+
+const issueTokens = (username, role) => {
+  const refreshToken = signToken(username, role, 'refresh', REFRESH_EXPIRES_IN);
+  refreshTokens.add(jwt.decode(refreshToken).jti);
+  return {
+    accessToken: signToken(username, role, 'access', ACCESS_EXPIRES_IN),
+    refreshToken,
+  };
 };
 
 const hashPassword = (password, salt) =>
@@ -49,23 +69,31 @@ router.post('/login', (req, res) => {
   if (!crypto.timingSafeEqual(actual, given)) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
-  const token = jwt.sign({ role: user.role }, JWT_SECRET, {
-    algorithm: 'HS256',
-    subject: username,
-    expiresIn: JWT_EXPIRES_IN,
-    jwtid: crypto.randomUUID(),
-  });
-  res.json({ token });
+  res.json(issueTokens(username, user.role));
+});
+
+router.post('/refresh', (req, res) => {
+  const payload = verifyToken(String((req.body || {}).refreshToken), 'refresh');
+  if (!payload || !refreshTokens.delete(payload.jti)) {
+    return res.status(401).json({ error: 'invalid refresh token' });
+  }
+  const user = users.get(payload.sub);
+  if (!user) {
+    return res.status(401).json({ error: 'invalid refresh token' });
+  }
+  res.json(issueTokens(payload.sub, user.role));
 });
 
 router.post('/logout', (req, res) => {
-  const payload = verifyToken(getToken(req));
-  if (payload) revoked.add(payload.jti);
+  const access = verifyToken(getToken(req), 'access');
+  if (access) revoked.add(access.jti);
+  const refresh = verifyToken(String((req.body || {}).refreshToken), 'refresh');
+  if (refresh) refreshTokens.delete(refresh.jti);
   res.json({ loggedOut: true });
 });
 
 const requireAuth = (req, res, next) => {
-  const payload = verifyToken(getToken(req));
+  const payload = verifyToken(getToken(req), 'access');
   if (!payload) {
     return res.status(401).json({ error: 'unauthorized' });
   }
