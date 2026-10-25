@@ -1,6 +1,12 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert');
+const express = require('express');
+
+process.env.RATE_LIMIT = '10000';
+process.env.AUTH_RATE_LIMIT = '10000';
+
 const app = require('../index');
+const { createLimiter } = require('../src/api/rateLimit');
 
 let server;
 let base;
@@ -102,4 +108,19 @@ test('logout invalidates token', async () => {
   const token = await login('admin1');
   await call('POST', '/auth/logout', { token });
   assert.strictEqual((await call('DELETE', '/1', { token })).status, 401);
+});
+
+test('rate limit: 429 after exceeding limit', async () => {
+  const small = express();
+  small.use(createLimiter(2));
+  small.get('/', (req, res) => res.json({ ok: true }));
+  const srv = small.listen(0);
+  try {
+    const url = `http://localhost:${srv.address().port}/`;
+    const statuses = [];
+    for (let i = 0; i < 3; i++) statuses.push((await fetch(url)).status);
+    assert.deepStrictEqual(statuses, [200, 200, 429]);
+  } finally {
+    srv.close();
+  }
 });

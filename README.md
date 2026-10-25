@@ -25,10 +25,17 @@ npm start   # http://localhost:3000
 보호된 라우트는 `Authorization: Bearer <token>` 헤더가 필요합니다.
 인증 없음은 401, 권한 부족은 403을 반환합니다.
 
+## Rate limiting
+
+- 전역: IP당 15분에 100회 (`RATE_LIMIT`)
+- `/auth/*`: IP당 15분에 10회 (`AUTH_RATE_LIMIT`)
+- 초과 시 429 `{ "error": "too many requests" }`
+
 ## 구조
 
 - `index.js`: 서버 진입점
 - `src/api/auth.js`: 가입/로그인/로그아웃, `requireAuth`
+- `src/api/rateLimit.js`: rate limit 설정
 - `src/api/authorize.ts`: `authorize(...roles)`, `errorHandler`, 타입 정의
 
 ## 참고

@@ -6,6 +6,7 @@ Express 기반 간단한 REST API 프로젝트 (인증 및 역할 기반 권한 
 - `index.js`: 서버 진입점 (포트 3000). 직접 실행 시에만 listen, `app` export
 - `src/api/auth.js`: `/auth` 라우터(register/login/logout), `requireAuth` 미들웨어. JWT(HS256) access(15분)/refresh(7일) 토큰, 사용자·차단 목록·refresh 목록은 메모리 저장
 - `src/api/authorize.ts`: `authorize(...roles)`, `errorHandler`, `HttpError`, 타입 정의
+- `src/api/rateLimit.js`: express-rate-limit 설정. 전역 15분 100회, `/auth` 15분 10회 (초과 시 429), 메모리 저장
 - `test/api.test.js`: `node:test` 기반 API 테스트
 - `tsconfig.json`: 타입 체크용 (`noEmit`)
 - `package.json`: express, 개발 의존성 typescript/tsx/@types/*
@@ -27,6 +28,7 @@ Express 기반 간단한 REST API 프로젝트 (인증 및 역할 기반 권한 
 - 실행: `npm start` (`tsx index.js`, `node index.js`는 .ts를 못 불러옴)
 - 테스트: `npm test`
 - 타입 체크: `npx tsc -p .`
+- 환경변수: `RATE_LIMIT`(전역), `AUTH_RATE_LIMIT`(`/auth`)로 한도 조정 (테스트는 높게 설정)
 - 환경변수: `JWT_SECRET`을 `.env`로 관리 (`process.loadEnvFile`, `.env.example` 참고). 미설정 시 실행마다 랜덤, 재시작하면 기존 토큰 무효
 
 ## 상태
