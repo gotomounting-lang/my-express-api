@@ -26,7 +26,7 @@ Express 기반 간단한 REST API 프로젝트 (인증 및 역할 기반 권한 
 ## 명령어
 - 설치: `npm install`
 - 실행: `npm start` (`tsx index.js`, `node index.js`는 .ts를 못 불러옴)
-- 테스트: `npm test`
+- 테스트: `npm test` (CI용 병렬+커버리지: `npm run test:ci`)
 - 타입 체크: `npx tsc -p .`
 - 환경변수: `RATE_LIMIT`(전역), `AUTH_RATE_LIMIT`(`/auth`)로 한도 조정 (테스트는 높게 설정)
 - 환경변수: `JWT_SECRET`을 `.env`로 관리 (`process.loadEnvFile`, `.env.example` 참고). 미설정 시 실행마다 랜덤, 재시작하면 기존 토큰 무효
