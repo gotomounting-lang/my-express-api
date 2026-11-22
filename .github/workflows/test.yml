@@ -1,0 +1,56 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# 같은 PR의 이전 실행은 취소해 러너 낭비 방지
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      # 병렬 실행: 테스트 파일을 CPU 코어 수만큼 동시에 실행 + 커버리지 수집
+      # 하나라도 실패하면 이 스텝이 실패 -> job 실패 -> 필수 체크로 병합 차단
+      - name: Run tests with coverage
+        run: |
+          set -o pipefail
+          mkdir -p coverage
+          npm run test:ci | tee coverage.txt
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          {
+            echo '## 테스트 커버리지'
+            echo '```'
+            sed -n '/start of coverage report/,/end of coverage report/p' coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.txt
+            coverage/lcov.info
+          if-no-files-found: ignore
